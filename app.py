@@ -75,7 +75,7 @@ if not st.session_state.logged_in:
         n = st.text_input("Name")
         e = st.text_input("Email", key="reg_e")
         p = st.text_input("Pass", type="password")
-        if st.button("Send OTP"):
+        if st.button("verify"):
             otp = send_otp(e)
             if otp: st.session_state.generated_otp = otp
         if st.session_state.generated_otp:
