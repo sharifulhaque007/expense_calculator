@@ -94,7 +94,7 @@ if not st.session_state.logged_in:
             if un:
                 st.session_state.logged_in, st.session_state.user_email, st.session_state.user_name = True, le, un
                 st.rerun()
-            else: st.error("Wrong details.")
+            else: st.error("Wrong password try again.")
 else:
     st.sidebar.title(f"Hi, {st.session_state.user_name}")
     if st.sidebar.button("Logout"):
