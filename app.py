@@ -76,14 +76,32 @@ if not st.session_state.logged_in:
         e = st.text_input("Email", key="reg_e")
         p = st.text_input("Pass", type="password")
         if st.button("send OTP"):
-            otp = send_otp(e)
-            if otp: st.session_state.generated_otp = otp
+            if e:
+                with st.spinner("Sending..."):
+                    otp = send_otp(e)
+                    if otp: 
+                        st.session_state.generated_otp = otp
+                        st.success("Code sent!")
+            else:
+                st.warning("Enter email first.")
+
         if st.session_state.generated_otp:
             u_otp = st.text_input("Enter OTP")
             if st.button("Verify"):
                 if u_otp == st.session_state.generated_otp:
-                    if sign_up(n, e, p): st.success("Done! Login now.")
-                    else: st.error("Email exists.")
+                    if sign_up(n, e, p): 
+                        # --- Registration por Auto-Login logic ---
+                        st.session_state.logged_in = True
+                        st.session_state.user_email = e
+                        st.session_state.user_name = n
+                        st.session_state.generated_otp = None
+                        st.success("Verified! Entering Dashboard...")
+                        time.sleep(1)
+                        st.rerun()
+                    else: 
+                        st.error("Email exists.")
+                else: 
+                    st.error("Wrong OTP.")
 
     with tab1:
         st.header("Login")
@@ -94,40 +112,53 @@ if not st.session_state.logged_in:
             if un:
                 st.session_state.logged_in, st.session_state.user_email, st.session_state.user_name = True, le, un
                 st.rerun()
-            else: st.error("Wrong password try again.")
+            else: 
+                st.error("Wrong password try again.")
 else:
+    # --- DASHBOARD UI ---
     st.sidebar.title(f"Hi, {st.session_state.user_name}")
     if st.sidebar.button("Logout"):
         st.session_state.logged_in = False
         st.rerun()
 
     st.title("💰 Expense Tracker")
-    amt = st.number_input("Amount (TK):", min_value=0.0)
-    cat = st.selectbox("Category:", ["Food", "Transport", "Bills", "Rent", "Others"])
-
-    if st.button("Add"):
-        if amt > 0:
-            pd.DataFrame([[st.session_state.user_email, amt, cat]], columns=["Email", "Amount", "Category"]).to_csv(EXPENSE_DB, mode='a', header=False, index=False)
-            st.success("Added!")
-            time.sleep(0.5)
-            st.rerun()
+    
+    # Input container
+    with st.container():
+        amt = st.number_input("Amount (TK):", min_value=0.0)
+        cat = st.selectbox("Category:", ["Food", "Transport", "Bills", "Rent", "Others"])
+        if st.button("Add Expense"):
+            if amt > 0:
+                pd.DataFrame([[st.session_state.user_email, amt, cat]], 
+                             columns=["Email", "Amount", "Category"]).to_csv(EXPENSE_DB, mode='a', header=False, index=False)
+                st.toast("Added Successfully!")
+                time.sleep(0.5)
+                st.rerun()
 
     st.divider()
+    
+    # Load and Filter Data
     df = pd.read_csv(EXPENSE_DB)
     my_df = df[df['Email'].astype(str).str.lower().str.strip() == st.session_state.user_email.lower().strip()]
 
     if not my_df.empty:
-        st.subheader("Your Spending Statistics")
-        # --- Built-in Chart (No Plotly Needed) ---
+        st.subheader("📊 Spending Analysis")
+        # Calculation for chart
         chart_data = my_df.groupby("Category")["Amount"].sum()
-        st.bar_chart(chart_data) # Bar chart dekhabe
-
-        st.metric("Total Spent", f"{my_df['Amount'].sum()} TK")
+        
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            st.bar_chart(chart_data)
+        with col2:
+            total = my_df['Amount'].sum()
+            st.metric("Total Spent", f"{total} TK")
+        
+        st.subheader("📜 Detail History")
         st.table(my_df[["Category", "Amount"]])
     else:
-        st.info("No data yet.")
+        st.info("No data yet. Start adding expenses!")
 
-    if st.expander("Delete All Data"):
-        if st.button("Clear Records"):
+    with st.expander("🚨 Danger Zone"):
+        if st.button("Clear My All Records"):
             clear_user_data(st.session_state.user_email)
             st.rerun()
