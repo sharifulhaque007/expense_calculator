@@ -205,11 +205,6 @@ else:
     else:
         st.info("No data yet. Start adding expenses!")
 
-    with st.expander("🚨 Danger Zone"):
-        if st.button("Clear My All Records"):
-            clear_user_data(st.session_state.user_email)
-            st.rerun()
-
     # --- CHAT & PERMISSION SYSTEM ---
     st.divider()
     st.subheader("💬 Chat & Permission System")
@@ -253,7 +248,7 @@ else:
 
         # Input new message
         new_msg = st.text_input("Type a message")
-        if st.button("Send", key="send_msg"):
+        if st.button("Send", key=f"send_msg_{receiver_email.replace('@','_at_')}"):
             if new_msg.strip():
                 send_message(st.session_state.user_email, receiver_email, new_msg.strip())
                 st.experimental_rerun()
@@ -268,12 +263,22 @@ else:
         requester_name = df_users[df_users['Email']==requester_email].iloc[0]['Name']
         col1, col2 = st.columns(2)
         with col1:
-            if st.button(f"Accept {requester_name}", key=f"accept_{requester_email}"):
+            accept_key = f"accept_{requester_email.replace('@','_at_')}"
+            if st.button(f"Accept {requester_name}", key=accept_key):
                 update_permission(requester_email, st.session_state.user_email, "Accepted")
                 st.success(f"Permission granted to {requester_name}")
                 st.experimental_rerun()
         with col2:
-            if st.button(f"Deny {requester_name}", key=f"deny_{requester_email}"):
+            deny_key = f"deny_{requester_email.replace('@','_at_')}"
+            if st.button(f"Deny {requester_name}", key=deny_key):
                 update_permission(requester_email, st.session_state.user_email, "Denied")
                 st.info(f"Permission denied to {requester_name}")
                 st.experimental_rerun()
+
+    # --- DANGER ZONE ---
+    st.divider()
+    with st.expander("🚨 Danger Zone - Clear All My Records"):
+        if st.button("Clear My All Records"):
+            clear_user_data(st.session_state.user_email)
+            st.success("All your expense records have been cleared!")
+            st.experimental_rerun()
