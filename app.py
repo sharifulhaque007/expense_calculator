@@ -1,9 +1,4 @@
-diff --git a/app.py b/app.py
-index db14333138064cf6c323c1355da24062c98bdda3..c79739ca6498aaeb05b66dbe2a30a0db15b182a0 100644
---- a/app.py
-+++ b/app.py
-@@ -182,71 +182,92 @@ else:
-                 st.rerun()
+
  
      st.divider()
      
