@@ -209,7 +209,9 @@ else:
     other_users = df_users[df_users['Email'].str.lower().str.strip() != st.session_state.user_email.lower().strip()]
     user_map = dict(zip(other_users['Name'], other_users['Email']))
 
-    chat_with = st.selectbox("Select a user to message:", [""] + list(user_map.keys()))
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("💬 Direct Message")
+    chat_with = st.sidebar.selectbox("Message user", [""] + list(user_map.keys()))
 
     if chat_with:
         receiver_email = user_map[chat_with]
