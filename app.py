@@ -203,30 +203,33 @@ else:
 
     # --- CHAT (NO PERMISSION REQUIRED) ---
     st.divider()
-    st.subheader("💬 Direct Messages")
+    dm_left, dm_right = st.columns([3, 1])
 
     df_users = pd.read_csv(USER_DB)
     other_users = df_users[df_users['Email'].str.lower().str.strip() != st.session_state.user_email.lower().strip()]
     user_map = dict(zip(other_users['Name'], other_users['Email']))
 
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("💬 Direct Message")
-    chat_with = st.sidebar.selectbox("Message user", [""] + list(user_map.keys()))
+    with dm_right:
+        st.subheader("💬 Direct Messages")
+        chat_with = st.selectbox("Message user", [""] + list(user_map.keys()))
 
-    if chat_with:
-        receiver_email = user_map[chat_with]
+    with dm_left:
+        if chat_with:
+            receiver_email = user_map[chat_with]
 
-        st.write(f"--- Chat with {chat_with} ---")
-        messages = get_messages(st.session_state.user_email, receiver_email)
-        for _, row in messages.iterrows():
-            role = "You" if row['Sender'] == st.session_state.user_email else chat_with
-            st.markdown(f"**{role}**: {row['Message']}")
+            st.write(f"--- Chat with {chat_with} ---")
+            messages = get_messages(st.session_state.user_email, receiver_email)
+            for _, row in messages.iterrows():
+                role = "You" if row['Sender'] == st.session_state.user_email else chat_with
+                st.markdown(f"**{role}**: {row['Message']}")
 
-        new_msg = st.text_input("Type a message", key=f"input_{receiver_email}")
-        if st.button("Send", key=f"btn_{receiver_email}"):
-            if new_msg.strip():
-                send_message(st.session_state.user_email, receiver_email, new_msg.strip())
-                st.rerun()
+            new_msg = st.text_input("Type a message", key=f"input_{receiver_email}")
+            if st.button("Send", key=f"btn_{receiver_email}"):
+                if new_msg.strip():
+                    send_message(st.session_state.user_email, receiver_email, new_msg.strip())
+                    st.rerun()
+        else:
+            st.info("ডান পাশে একজন user select করে direct message শুরু করুন।")
 
     # --- EXPENSE VIEW PERMISSION SYSTEM ---
     st.divider()
