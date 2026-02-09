@@ -203,33 +203,49 @@ else:
 
     # --- CHAT (NO PERMISSION REQUIRED) ---
     st.divider()
-    dm_left, dm_right = st.columns([3, 1])
+    st.subheader("💬 Direct Messages")
+    st.caption("Collaborate with teammates in a clean, business-friendly chat panel.")
 
     df_users = pd.read_csv(USER_DB)
     other_users = df_users[df_users['Email'].str.lower().str.strip() != st.session_state.user_email.lower().strip()]
     user_map = dict(zip(other_users['Name'], other_users['Email']))
 
+    dm_left, dm_right = st.columns([3, 1], gap="large")
+
     with dm_right:
-        st.subheader("💬 Direct Messages")
-        chat_with = st.selectbox("Message user", [""] + list(user_map.keys()))
+        with st.container(border=True):
+            st.markdown("#### Conversation Panel")
+            chat_with = st.selectbox("Choose teammate", [""] + list(user_map.keys()))
+
+            if chat_with:
+                receiver_email = user_map[chat_with]
+                messages = get_messages(st.session_state.user_email, receiver_email)
+                st.metric("Messages", len(messages))
+                if not messages.empty:
+                    st.caption(f"Last activity: {messages.iloc[-1]['Timestamp']}")
+            else:
+                st.caption("Select a teammate to open conversation.")
 
     with dm_left:
-        if chat_with:
-            receiver_email = user_map[chat_with]
+        with st.container(border=True):
+            if chat_with:
+                receiver_email = user_map[chat_with]
+                st.markdown(f"#### Chat with {chat_with}")
 
-            st.write(f"--- Chat with {chat_with} ---")
-            messages = get_messages(st.session_state.user_email, receiver_email)
-            for _, row in messages.iterrows():
-                role = "You" if row['Sender'] == st.session_state.user_email else chat_with
-                st.markdown(f"**{role}**: {row['Message']}")
+                messages = get_messages(st.session_state.user_email, receiver_email)
+                for _, row in messages.iterrows():
+                    role = "You" if row['Sender'] == st.session_state.user_email else chat_with
+                    st.markdown(f"**{role}** · {row['Timestamp']}  ")
+                    st.markdown(f"{row['Message']}")
+                    st.markdown("---")
 
-            new_msg = st.text_input("Type a message", key=f"input_{receiver_email}")
-            if st.button("Send", key=f"btn_{receiver_email}"):
-                if new_msg.strip():
-                    send_message(st.session_state.user_email, receiver_email, new_msg.strip())
-                    st.rerun()
-        else:
-            st.info("ডান পাশে একজন user select করে direct message শুরু করুন।")
+                new_msg = st.text_input("Type your message", key=f"input_{receiver_email}", placeholder="Write a clear business message...")
+                if st.button("Send Message", key=f"btn_{receiver_email}", use_container_width=True):
+                    if new_msg.strip():
+                        send_message(st.session_state.user_email, receiver_email, new_msg.strip())
+                        st.rerun()
+            else:
+                st.info("Select a teammate from the right panel to start direct messaging.")
 
     # --- EXPENSE VIEW PERMISSION SYSTEM ---
     st.divider()
