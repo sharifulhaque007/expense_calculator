@@ -201,36 +201,19 @@ else:
     else:
         st.info("No data yet. Start adding expenses!")
 
-    # --- CHAT & PERMISSION SYSTEM ---
+    # --- CHAT (NO PERMISSION REQUIRED) ---
     st.divider()
-    st.subheader("💬 Chat & Permission System")
+    st.subheader("💬 Direct Messages")
 
     df_users = pd.read_csv(USER_DB)
     other_users = df_users[df_users['Email'].str.lower().str.strip() != st.session_state.user_email.lower().strip()]
     user_map = dict(zip(other_users['Name'], other_users['Email']))
 
-    chat_with = st.selectbox("Select a user to chat/view:", [""] + list(user_map.keys()))
+    chat_with = st.selectbox("Select a user to message:", [""] + list(user_map.keys()))
 
     if chat_with:
         receiver_email = user_map[chat_with]
-        perm_status = check_permission(st.session_state.user_email, receiver_email)
 
-        if perm_status != "Accepted":
-            st.info(f"You don't have access to {chat_with}'s expense data.")
-            if st.button("Request Access"):
-                if request_permission(st.session_state.user_email, receiver_email):
-                    st.success("Request sent!")
-                else:
-                    st.warning("Request already pending.")
-        else:
-            their_df = df[df['Email'].astype(str).str.lower().str.strip() == receiver_email.lower().strip()]
-            if not their_df.empty:
-                st.subheader(f"📊 {chat_with}'s Expenses")
-                st.table(their_df[["Category", "Amount"]])
-            else:
-                st.info(f"{chat_with} has no data.")
-
-        # Chat
         st.write(f"--- Chat with {chat_with} ---")
         messages = get_messages(st.session_state.user_email, receiver_email)
         for _, row in messages.iterrows():
@@ -242,6 +225,30 @@ else:
             if new_msg.strip():
                 send_message(st.session_state.user_email, receiver_email, new_msg.strip())
                 st.rerun()
+
+    # --- EXPENSE VIEW PERMISSION SYSTEM ---
+    st.divider()
+    st.subheader("🔐 Expense View Permissions")
+
+    view_user = st.selectbox("Select a user to view expenses:", [""] + list(user_map.keys()))
+    if view_user:
+        view_user_email = user_map[view_user]
+        perm_status = check_permission(st.session_state.user_email, view_user_email)
+
+        if perm_status != "Accepted":
+            st.info(f"You need {view_user}'s permission to view expense data.")
+            if st.button("Request Expense Access"):
+                if request_permission(st.session_state.user_email, view_user_email):
+                    st.success("Request sent!")
+                else:
+                    st.warning("Request already exists.")
+        else:
+            their_df = df[df['Email'].astype(str).str.lower().str.strip() == view_user_email.lower().strip()]
+            if not their_df.empty:
+                st.subheader(f"📊 {view_user}'s Expenses")
+                st.table(their_df[["Category", "Amount"]])
+            else:
+                st.info(f"{view_user} has no data.")
 
     # Incoming requests
     st.subheader("📝 Pending Requests for You")
