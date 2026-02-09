@@ -1,4 +1,8 @@
-
+diff --git a/app.py b/app.py
+index 3e8da3f35c0ec461aa972495bfda0a6683b46a11..954b8b51ac0b5c2f7f9fdebfa6bddb8b0f36b674 100644
+--- a/app.py
++++ b/app.py
+@@ -1,145 +1,210 @@
  import streamlit as st
  import pandas as pd
  import os
@@ -233,7 +237,7 @@
                      else:
                          st.error("Email already exists.")
                  else:
-@@ -147,125 +212,160 @@ if not st.session_state.logged_in:
+@@ -147,125 +212,162 @@ if not st.session_state.logged_in:
  
      with tab1:
          st.header("Login")
@@ -309,16 +313,17 @@
 -        
 +
          st.subheader("📜 Detail History")
-         st.dataframe(my_df[["Category", "Amount"]], use_container_width=True)
+-        st.dataframe(my_df[["Category", "Amount"]], use_container_width=True)
++        history_df = my_df[["Category", "Amount"]].copy()
++        history_df.loc[len(history_df)] = ["Total", history_df["Amount"].sum()]
++        st.dataframe(history_df, use_container_width=True)
      else:
          st.info("No data yet. Start adding expenses!")
  
 -    # --- CHAT & PERMISSION SYSTEM ---
-+    # --- CHAT (NO PERMISSION REQUIRED) ---
-     st.divider()
+-    st.divider()
 -    st.subheader("💬 Chat & Permission System")
-+    st.subheader("💬 Direct Messages")
- 
+-
      df_users = pd.read_csv(USER_DB)
 -    other_users = df_users[df_users['Email'].str.lower().str.strip() != st.session_state.user_email.lower().strip()]
 -    user_map = dict(zip(other_users['Name'], other_users['Email']))
@@ -326,11 +331,71 @@
 +    user_map = dict(zip(other_users["Name"], other_users["Email"]))
  
 -    chat_with = st.selectbox("Select a user to chat/view:", [""] + list(user_map.keys()))
-+    chat_with = st.selectbox("Select a user to message:", [""] + list(user_map.keys()))
++    st.divider()
++    main_col, message_col = st.columns([1.2, 1])
++
++    with message_col:
++        st.subheader("💬 Direct Messages")
++        chat_with = st.selectbox("Select a user to message:", [""] + list(user_map.keys()))
++
++        if chat_with:
++            receiver_email = user_map[chat_with]
++
++            # Mark notifications from this sender as read after opening chat
++            mark_notifications_read(st.session_state.user_email, receiver_email)
++
++            st.write(f"--- Chat with {chat_with} ---")
++            messages = get_messages(st.session_state.user_email, receiver_email)
++            for _, row in messages.iterrows():
++                role = "You" if row["Sender"] == st.session_state.user_email else chat_with
++                st.markdown(f"**{role}**: {row['Message']}")
++
++            new_msg = st.text_input("Type a message", key=f"input_{receiver_email}")
++            if st.button("Send", key=f"btn_{receiver_email}"):
++                if new_msg.strip():
++                    message_text = new_msg.strip()
++                    send_message(st.session_state.user_email, receiver_email, message_text)
++                    add_notification(receiver_email, "New Message", st.session_state.user_email, message_text)
++                    send_new_message_email(receiver_email, st.session_state.user_email, message_text)
++                    st.success("Message sent.")
++                    st.rerun()
++
++    with main_col:
++        st.subheader("🔐 Expense View Permissions")
++
++        view_user = st.selectbox("Select a user to view expenses:", [""] + list(user_map.keys()))
++        if view_user:
++            view_user_email = user_map[view_user]
++            perm_status = check_permission(st.session_state.user_email, view_user_email)
++
++            if perm_status != "Accepted":
++                st.info(f"You need {view_user}'s permission to view expense data.")
++                if st.button("Request Expense Access"):
++                    if request_permission(st.session_state.user_email, view_user_email):
++                        add_notification(
++                            view_user_email,
++                            "Access Request",
++                            st.session_state.user_email,
++                            "requested access to view your expenses.",
++                        )
++                        st.success("Request sent!")
++                    else:
++                        st.warning("Request already exists.")
++            else:
++                their_df = df[df["Email"].astype(str).str.lower().str.strip() == view_user_email.lower().strip()]
++                if not their_df.empty:
++                    st.subheader(f"📊 {view_user}'s Expenses")
++                    st.table(their_df[["Category", "Amount"]])
++                else:
++                    st.info(f"{view_user} has no data.")
  
-     if chat_with:
-         receiver_email = user_map[chat_with]
+-    if chat_with:
+-        receiver_email = user_map[chat_with]
 -        perm_status = check_permission(st.session_state.user_email, receiver_email)
++        # Incoming requests
++        st.subheader("📝 Pending Requests for You")
++        perm_df = pd.read_csv(PERMISSION_DB)
++        incoming = perm_df[(perm_df["Receiver"] == st.session_state.user_email) & (perm_df["Status"] == "Pending")]
  
 -        if perm_status != "Accepted":
 -            st.info(f"You don't have access to {chat_with}'s expense data.")
@@ -346,79 +411,48 @@
 -                st.table(their_df[["Category", "Amount"]])
 -            else:
 -                st.info(f"{chat_with} has no data.")
-+        # Mark notifications from this sender as read after opening chat
-+        mark_notifications_read(st.session_state.user_email, receiver_email)
- 
+-
 -        # Chat
-         st.write(f"--- Chat with {chat_with} ---")
-         messages = get_messages(st.session_state.user_email, receiver_email)
-         for _, row in messages.iterrows():
+-        st.write(f"--- Chat with {chat_with} ---")
+-        messages = get_messages(st.session_state.user_email, receiver_email)
+-        for _, row in messages.iterrows():
 -            role = "You" if row['Sender'] == st.session_state.user_email else chat_with
-+            role = "You" if row["Sender"] == st.session_state.user_email else chat_with
-             st.markdown(f"**{role}**: {row['Message']}")
- 
-         new_msg = st.text_input("Type a message", key=f"input_{receiver_email}")
-         if st.button("Send", key=f"btn_{receiver_email}"):
-             if new_msg.strip():
+-            st.markdown(f"**{role}**: {row['Message']}")
+-
+-        new_msg = st.text_input("Type a message", key=f"input_{receiver_email}")
+-        if st.button("Send", key=f"btn_{receiver_email}"):
+-            if new_msg.strip():
 -                send_message(st.session_state.user_email, receiver_email, new_msg.strip())
-+                message_text = new_msg.strip()
-+                send_message(st.session_state.user_email, receiver_email, message_text)
-+                add_notification(receiver_email, "New Message", st.session_state.user_email, message_text)
-+                send_new_message_email(receiver_email, st.session_state.user_email, message_text)
-+                st.success("Message sent.")
-                 st.rerun()
+-                st.rerun()
++        for _, row in incoming.iterrows():
++            req_email = row["Requester"]
++            req_name_list = df_users[df_users["Email"] == req_email]["Name"].values
++            req_name = req_name_list[0] if len(req_name_list) > 0 else req_email
  
-+    # --- EXPENSE VIEW PERMISSION SYSTEM ---
-+    st.divider()
-+    st.subheader("🔐 Expense View Permissions")
-+
-+    view_user = st.selectbox("Select a user to view expenses:", [""] + list(user_map.keys()))
-+    if view_user:
-+        view_user_email = user_map[view_user]
-+        perm_status = check_permission(st.session_state.user_email, view_user_email)
-+
-+        if perm_status != "Accepted":
-+            st.info(f"You need {view_user}'s permission to view expense data.")
-+            if st.button("Request Expense Access"):
-+                if request_permission(st.session_state.user_email, view_user_email):
-+                    add_notification(
-+                        view_user_email,
-+                        "Access Request",
-+                        st.session_state.user_email,
-+                        "requested access to view your expenses.",
-+                    )
-+                    st.success("Request sent!")
-+                else:
-+                    st.warning("Request already exists.")
-+        else:
-+            their_df = df[df["Email"].astype(str).str.lower().str.strip() == view_user_email.lower().strip()]
-+            if not their_df.empty:
-+                st.subheader(f"📊 {view_user}'s Expenses")
-+                st.table(their_df[["Category", "Amount"]])
-+            else:
-+                st.info(f"{view_user} has no data.")
-+
-     # Incoming requests
-     st.subheader("📝 Pending Requests for You")
-     perm_df = pd.read_csv(PERMISSION_DB)
+-    # Incoming requests
+-    st.subheader("📝 Pending Requests for You")
+-    perm_df = pd.read_csv(PERMISSION_DB)
 -    incoming = perm_df[(perm_df['Receiver']==st.session_state.user_email) & (perm_df['Status']=="Pending")]
-+    incoming = perm_df[(perm_df["Receiver"] == st.session_state.user_email) & (perm_df["Status"] == "Pending")]
- 
-     for _, row in incoming.iterrows():
+-
+-    for _, row in incoming.iterrows():
 -        req_email = row['Requester']
 -        req_name_list = df_users[df_users['Email']==req_email]['Name'].values
-+        req_email = row["Requester"]
-+        req_name_list = df_users[df_users["Email"] == req_email]["Name"].values
-         req_name = req_name_list[0] if len(req_name_list) > 0 else req_email
+-        req_name = req_name_list[0] if len(req_name_list) > 0 else req_email
 -        
-+
-         c1, c2 = st.columns(2)
-         if c1.button(f"Accept {req_name}", key=f"acc_{req_email}"):
-             update_permission(req_email, st.session_state.user_email, "Accepted")
-             st.rerun()
-         if c2.button(f"Deny {req_name}", key=f"deny_{req_email}"):
-             update_permission(req_email, st.session_state.user_email, "Denied")
-             st.rerun()
+-        c1, c2 = st.columns(2)
+-        if c1.button(f"Accept {req_name}", key=f"acc_{req_email}"):
+-            update_permission(req_email, st.session_state.user_email, "Accepted")
+-            st.rerun()
+-        if c2.button(f"Deny {req_name}", key=f"deny_{req_email}"):
+-            update_permission(req_email, st.session_state.user_email, "Denied")
+-            st.rerun()
++            c1, c2 = st.columns(2)
++            if c1.button(f"Accept {req_name}", key=f"acc_{req_email}"):
++                update_permission(req_email, st.session_state.user_email, "Accepted")
++                st.rerun()
++            if c2.button(f"Deny {req_name}", key=f"deny_{req_email}"):
++                update_permission(req_email, st.session_state.user_email, "Denied")
++                st.rerun()
  
      # --- DANGER ZONE ---
      st.divider()
@@ -428,6 +462,3 @@
              st.success("Cleared!")
              time.sleep(1)
              st.rerun()
- 
-EOF
-)
