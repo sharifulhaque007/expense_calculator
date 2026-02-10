@@ -67,12 +67,12 @@ def sign_in(email, password):
     df = pd.read_csv(USER_DB)
     email = str(email).lower().strip()
     password = str(password).strip()
+    # এখানেও টাইপ কাস্ট করা হয়েছে
     mask = (df['Email'].astype(str).str.lower().str.strip() == email) & (df['Password'].astype(str).str.strip() == password)
     res = df[mask]
     return res.iloc[0]['Name'] if not res.empty else None
 
 def send_message(sender, receiver, message):
-    # বাংলাদেশের টাইমজোন (UTC + 6 hours)
     tz_bd = timezone(timedelta(hours=6))
     ts = datetime.now(tz_bd).strftime("%I:%M %p | %d %b")
     pd.DataFrame([[sender, receiver, message, ts]], 
@@ -80,7 +80,9 @@ def send_message(sender, receiver, message):
 
 def check_permission(requester, receiver):
     df = pd.read_csv(PERMISSION_DB)
-    row = df[(df['Requester']==requester) & (df['Receiver']==receiver)]
+    # এখানে টাইপ কাস্ট করা হয়েছে
+    row = df[(df['Requester'].astype(str).str.lower().str.strip() == requester.lower().strip()) & 
+             (df['Receiver'].astype(str).str.lower().str.strip() == receiver.lower().strip())]
     if not row.empty:
         return row.iloc[0]['Status']
     return None
@@ -161,10 +163,10 @@ else:
                     time.sleep(0.5)
                     st.rerun()
 
-        # --- এই অংশটি ফিক্স করা হয়েছে যাতে ডাটা দেখা যায় ---
+        # --- এই অংশটি ফিক্স করা হয়েছে ---
         if os.path.exists(EXPENSE_DB):
             df = pd.read_csv(EXPENSE_DB)
-            # ফিল্টারিং আরও শক্তিশালী করা হয়েছে
+            # শক্তিশালী ফিল্টারিং
             my_df = df[df['Email'].astype(str).str.lower().str.strip() == st.session_state.user_email.lower().strip()]
             
             if not my_df.empty:
@@ -179,7 +181,8 @@ else:
     with m_col2:
         st.title("🌐 Connect")
         df_users = pd.read_csv(USER_DB)
-        other_users = df_users[df_users['Email'].str.lower().str.strip() != st.session_state.user_email.lower().strip()]
+        # এখানেও টাইপ কাস্ট করা হয়েছে
+        other_users = df_users[df_users['Email'].astype(str).str.lower().str.strip() != st.session_state.user_email.lower().strip()]
         user_dict = dict(zip(other_users['Name'], other_users['Email']))
         
         target_name = st.selectbox("Find a Friend", ["Select User"] + list(user_dict.keys()))
@@ -191,18 +194,19 @@ else:
             with t1:
                 st.write(f"Messaging **{target_name}**")
                 chat_df = pd.read_csv(CHAT_DB)
-                # ইমেইল লোয়ারকেস করে ফিল্টার করা হচ্ছে
+                
                 my_mail = st.session_state.user_email.lower().strip()
                 friend_mail = target_email
                 
-                mask = ((chat_df['Sender'].str.lower().str.strip() == my_mail) & (chat_df['Receiver'].str.lower().str.strip() == friend_mail)) | \
-                       ((chat_df['Sender'].str.lower().str.strip() == friend_mail) & (chat_df['Receiver'].str.lower().str.strip() == my_mail))
+                # এখানেও টাইপ কাস্ট করা হয়েছে
+                mask = ((chat_df['Sender'].astype(str).str.lower().str.strip() == my_mail) & (chat_df['Receiver'].astype(str).str.lower().str.strip() == friend_mail)) | \
+                       ((chat_df['Sender'].astype(str).str.lower().str.strip() == friend_mail) & (chat_df['Receiver'].astype(str).str.lower().str.strip() == my_mail))
                 history = chat_df[mask]
 
                 chat_container = st.container(height=300)
                 for _, row in history.iterrows():
-                    is_me = row['Sender'].lower().strip() == my_mail
-                    # চ্যাটের কালার এবং টেক্সট ঠিক করা হয়েছে
+                    # এখানেও টাইপ কাস্ট করা হয়েছে
+                    is_me = row['Sender'].astype(str).lower().strip() == my_mail
                     bg_color = "#800080" if is_me else "#262730"
                     txt_color = "white"
                     align = "right" if is_me else "left"
@@ -227,7 +231,9 @@ else:
                 perm = check_permission(st.session_state.user_email, target_email)
                 if perm == "Accepted":
                     st.success(f"Access granted by {target_name}")
-                    friend_data = df[df['Email'].str.lower().str.strip() == target_email]
+                    # --- এই লাইনটি সম্পূর্ণ ফিক্স করা হয়েছে ---
+                    friend_data = df[df['Email'].astype(str).str.lower().str.strip() == target_email]
+                    
                     if not friend_data.empty:
                         st.dataframe(friend_data[["Date", "Category", "Amount"]], use_container_width=True)
                     else:
@@ -245,7 +251,7 @@ else:
         st.divider()
         st.subheader("🔔 Notifications")
         p_df = pd.read_csv(PERMISSION_DB)
-        incoming = p_df[(p_df['Receiver'] == st.session_state.user_email) & (p_df['Status'] == "Pending")]
+        incoming = p_df[(p_df['Receiver'].astype(str).str.lower().str.strip() == st.session_state.user_email.lower().strip()) & (p_df['Status'] == "Pending")]
 
         if not incoming.empty:
             for _, row in incoming.iterrows():
@@ -253,11 +259,11 @@ else:
                 st.info(f"**{r_mail}** wants to see your expenses.")
                 c1, c2 = st.columns(2)
                 if c1.button("✅ Approve", key=f"acc_{r_mail}"):
-                    p_df.loc[(p_df['Requester']==r_mail) & (p_df['Receiver']==st.session_state.user_email), 'Status'] = "Accepted"
+                    p_df.loc[(p_df['Requester'].astype(str).str.lower().str.strip()==r_mail.lower().strip()) & (p_df['Receiver'].astype(str).str.lower().str.strip()==st.session_state.user_email.lower().strip()), 'Status'] = "Accepted"
                     p_df.to_csv(PERMISSION_DB, index=False)
                     st.rerun()
                 if c2.button("❌ Deny", key=f"den_{r_mail}"):
-                    p_df.loc[(p_df['Requester']==r_mail) & (p_df['Receiver']==st.session_state.user_email), 'Status'] = "Denied"
+                    p_df.loc[(p_df['Requester'].astype(str).str.lower().str.strip()==r_mail.lower().strip()) & (p_df['Receiver'].astype(str).str.lower().str.strip()==st.session_state.user_email.lower().strip()), 'Status'] = "Denied"
                     p_df.to_csv(PERMISSION_DB, index=False)
                     st.rerun()
         else:
