@@ -67,6 +67,7 @@ def sign_in(email, password):
     df = pd.read_csv(USER_DB)
     email = str(email).lower().strip()
     password = str(password).strip()
+    # ইমেইল এবং পাসওয়ার্ড চেক করার সময় ক্লিন করা
     mask = (df['Email'].astype(str).str.lower().str.strip() == email) & (df['Password'].astype(str).str.strip() == password)
     res = df[mask]
     return res.iloc[0]['Name'] if not res.empty else None
@@ -79,6 +80,7 @@ def send_message(sender, receiver, message):
 
 def check_permission(requester, receiver):
     df = pd.read_csv(PERMISSION_DB)
+    # পারমিশন চেকে ইমেইল ফিল্টারিং
     row = df[(df['Requester'].astype(str).str.lower().str.strip() == requester.lower().strip()) & 
              (df['Receiver'].astype(str).str.lower().str.strip() == receiver.lower().strip())]
     if not row.empty:
@@ -157,7 +159,7 @@ else:
             if st.button("➕ Add Record", use_container_width=True, type="primary"):
                 if amt > 0:
                     dt = datetime.now().strftime("%Y-%m-%d")
-                    # ডাটা সেভ করার সময় ইমেইল ক্লিন করে নেওয়া হচ্ছে
+                    # ইমেইল ক্লিন করে সেভ করা
                     pd.DataFrame([[st.session_state.user_email.lower().strip(), amt, cat, dt]], 
                                  columns=["Email", "Amount", "Category", "Date"]).to_csv(EXPENSE_DB, mode='a', header=False, index=False)
                     st.toast("Expense added!", icon="✅")
@@ -168,12 +170,12 @@ else:
         st.divider()
         if os.path.exists(EXPENSE_DB):
             df_exp = pd.read_csv(EXPENSE_DB)
-            # ইমেইল দিয়ে ডাটা ফিল্টার করা
+            
+            # নিখুঁত ফিল্টারিং
             my_mail = st.session_state.user_email.lower().strip()
             my_df = df_exp[df_exp['Email'].astype(str).str.lower().str.strip() == my_mail]
             
             if not my_df.empty:
-                # টোটাল এবং চার্ট দেখানো
                 total = my_df['Amount'].sum()
                 st.metric(label="Total Spent", value=f"{total} TK")
                 
@@ -182,15 +184,16 @@ else:
                 st.bar_chart(chart_data)
                 
                 with st.expander("📄 Detailed History"):
+                    # ডাটা টেবিল দেখানো
                     st.table(my_df[["Date", "Category", "Amount"]].sort_values(by="Date", ascending=False))
             else:
-                st.info("No expense data found for your account. Start by adding one above!")
+                st.info("No expense data found. Add your first expense!")
         else:
             st.warning("Database not initialized.")
 
     with m_col2:
         st.title("🌐 Connect")
-        # Social & Chat Logic (সেম থাকছে)
+        # --- CHAT & PERMISSION SECTION ---
         df_users = pd.read_csv(USER_DB)
         other_users = df_users[df_users['Email'].astype(str).str.lower().str.strip() != st.session_state.user_email.lower().strip()]
         user_dict = dict(zip(other_users['Name'], other_users['Email']))
@@ -204,13 +207,14 @@ else:
             with t1:
                 chat_df = pd.read_csv(CHAT_DB)
                 my_mail = st.session_state.user_email.lower().strip()
+                # চ্যাট ফিল্টারিং
                 mask = ((chat_df['Sender'].astype(str).str.lower().str.strip() == my_mail) & (chat_df['Receiver'].astype(str).str.lower().str.strip() == target_email)) | \
                        ((chat_df['Sender'].astype(str).str.lower().str.strip() == target_email) & (chat_df['Receiver'].astype(str).str.lower().str.strip() == my_mail))
                 history = chat_df[mask]
 
                 chat_container = st.container(height=300)
                 for _, row in history.iterrows():
-                    is_me = row['Sender'].lower().strip() == my_mail
+                    is_me = row['Sender'].astype(str).lower().strip() == my_mail
                     bg = "#800080" if is_me else "#262730"
                     align = "right" if is_me else "left"
                     with chat_container:
@@ -226,6 +230,7 @@ else:
                 perm = check_permission(st.session_state.user_email, target_email)
                 if perm == "Accepted":
                     f_df = pd.read_csv(EXPENSE_DB)
+                    # বন্ধুর খরচ দেখার ফিল্টারিং
                     friend_data = f_df[f_df['Email'].astype(str).str.lower().str.strip() == target_email]
                     if not friend_data.empty:
                         st.dataframe(friend_data[["Date", "Category", "Amount"]], use_container_width=True)
@@ -236,5 +241,3 @@ else:
                     if st.button("Request 🔑"):
                         pd.DataFrame([[st.session_state.user_email, target_email, "Pending"]], columns=["Requester", "Receiver", "Status"]).to_csv(PERMISSION_DB, mode='a', header=False, index=False)
                         st.rerun()
-
-        # Notification Logic (সেম থাকছে)
