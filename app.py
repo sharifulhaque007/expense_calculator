@@ -67,7 +67,6 @@ def sign_in(email, password):
     df = pd.read_csv(USER_DB)
     email = str(email).lower().strip()
     password = str(password).strip()
-    # ইমেইল এবং পাসওয়ার্ড চেক করার সময় ক্লিন করা
     mask = (df['Email'].astype(str).str.lower().str.strip() == email) & (df['Password'].astype(str).str.strip() == password)
     res = df[mask]
     return res.iloc[0]['Name'] if not res.empty else None
@@ -136,7 +135,7 @@ else:
     # --- LOGGED IN UI ---
     with st.sidebar:
         st.markdown(f"### 👤 Welcome, {st.session_state.user_name}!")
-        st.caption(st.session_state.user_email)
+        st.code(st.session_state.user_email, language="text") # ইমেইল চেক করার জন্য
         st.divider()
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.logged_in = False
@@ -147,62 +146,64 @@ else:
     with m_col1:
         st.title("💸 My Expenses")
         
-        # Expense Form
         with st.container(border=True):
             c1, c2 = st.columns(2)
             with c1:
-                amt = st.number_input("Amount (TK)", min_value=0.0, step=10.0)
+                amt = st.number_input("Amount (TK)", min_value=0.0, step=10.0, key="amt_val")
             with c2:
-                cat = st.selectbox("Category", ["🍔 Food", "🚗 Transport", "🔌 Bills", "🏠 Rent", "🎁 Others"])
+                cat = st.selectbox("Category", ["🍔 Food", "🚗 Transport", "🔌 Bills", "🏠 Rent", "🎁 Others"], key="cat_val")
             
             if st.button("➕ Add Record", use_container_width=True, type="primary"):
                 if amt > 0:
                     dt = datetime.now().strftime("%Y-%m-%d")
-                    # ডাটা ক্লিন করে সেভ করা
-                    new_record = pd.DataFrame([[st.session_state.user_email.lower().strip(), amt, cat, dt]], 
+                    # ডাটা সেভ করার সময় ইমেইল ক্লিন করা নিশ্চিত করা
+                    save_email = str(st.session_state.user_email).lower().strip()
+                    new_record = pd.DataFrame([[save_email, amt, cat, dt]], 
                                              columns=["Email", "Amount", "Category", "Date"])
                     new_record.to_csv(EXPENSE_DB, mode='a', header=False, index=False)
-                    st.toast("Expense added!", icon="✅")
-                    time.sleep(0.5)
+                    st.success(f"Added {amt} TK to {cat}!")
+                    time.sleep(1)
                     st.rerun()
 
-        # --- DASHBOARD SECTION (UPDATED) ---
         st.divider()
         
+        # --- DASHBOARD LOGIC (ROBUST VERSION) ---
         if os.path.exists(EXPENSE_DB):
-            # ফাইল থেকে ডাটা রিড করা
             df_exp = pd.read_csv(EXPENSE_DB)
             
-            if not df_exp.empty:
-                # ডাটা ক্লিন করা (খুবই গুরুত্বপূর্ণ)
-                df_exp['Email'] = df_exp['Email'].astype(str).str.lower().str.strip()
-                my_mail = st.session_state.user_email.lower().strip()
+            # ডাটা টাইপ ঠিক করা
+            df_exp['Email'] = df_exp['Email'].astype(str).str.lower().str.strip()
+            df_exp['Amount'] = pd.to_numeric(df_exp['Amount'], errors='coerce')
+            
+            current_user = str(st.session_state.user_email).lower().strip()
+            
+            # ফিল্টার করা ডাটা
+            my_df = df_exp[df_exp['Email'] == current_user]
+            
+            if not my_df.empty:
+                total = my_df['Amount'].sum()
+                st.metric(label="Total Spent", value=f"{total:,.2f} TK")
                 
-                # ফিল্টারিং
-                my_df = df_exp[df_exp['Email'] == my_mail]
+                # বার চার্ট
+                st.subheader("📊 Category Distribution")
+                chart_data = my_df.groupby("Category")["Amount"].sum()
+                st.bar_chart(chart_data)
                 
-                if not my_df.empty:
-                    # ড্যাশবোর্ড দেখানো
-                    total = my_df['Amount'].sum()
-                    st.metric(label="Total Spent", value=f"{total:,.2f} TK")
-                    
-                    st.subheader("📊 Category-wise Distribution")
-                    chart_data = my_df.groupby("Category")["Amount"].sum()
-                    st.bar_chart(chart_data)
-                    
-                    with st.expander("📄 Detailed History"):
-                        # ডাটা টেবিল দেখানো
-                        st.table(my_df[["Date", "Category", "Amount"]].sort_values(by="Date", ascending=False))
-                else:
-                    st.info("No expense data found for your account. Add your first expense above!")
+                # হিস্টোরি টেবিল
+                with st.expander("📄 History Table"):
+                    st.dataframe(my_df[["Date", "Category", "Amount"]].sort_values(by="Date", ascending=False), use_container_width=True)
             else:
                 st.info("No expense data found. Add your first expense!")
+                # DEBUG OPTION (নিচে আপনার ডাটাবেসে কি আছে তা দেখার জন্য)
+                with st.expander("🛠️ Debug: View Raw Database (Only you see this)"):
+                    st.write("Current User Email:", f"'{current_user}'")
+                    st.write("All Records in CSV:", df_exp)
         else:
-            st.warning("Database not found.")
+            st.warning("Database file missing.")
 
     with m_col2:
         st.title("🌐 Connect")
-        # Social & Chat Logic (সেম থাকছে)
+        # Social & Chat Logic
         df_users = pd.read_csv(USER_DB)
         other_users = df_users[df_users['Email'].astype(str).str.lower().str.strip() != st.session_state.user_email.lower().strip()]
         user_dict = dict(zip(other_users['Name'], other_users['Email']))
@@ -216,36 +217,16 @@ else:
             with t1:
                 chat_df = pd.read_csv(CHAT_DB)
                 my_mail = st.session_state.user_email.lower().strip()
-                # চ্যাট ফিল্টারিং
                 mask = ((chat_df['Sender'].astype(str).str.lower().str.strip() == my_mail) & (chat_df['Receiver'].astype(str).str.lower().str.strip() == target_email)) | \
                        ((chat_df['Sender'].astype(str).str.lower().str.strip() == target_email) & (chat_df['Receiver'].astype(str).str.lower().str.strip() == my_mail))
                 history = chat_df[mask]
 
-                chat_container = st.container(height=300)
+                chat_container = st.container(height=250)
                 for _, row in history.iterrows():
-                    is_me = row['Sender'].lower().strip() == my_mail
-                    bg = "#800080" if is_me else "#262730"
+                    is_me = str(row['Sender']).lower().strip() == my_mail
                     align = "right" if is_me else "left"
+                    bg = "#800080" if is_me else "#262730"
                     with chat_container:
-                        st.markdown(f"<div style='text-align: {align};'><div style='display: inline-block; background: {bg}; color: white; padding: 10px; border-radius: 10px; margin-bottom: 5px;'>{row['Message']}<br><small style='opacity: 0.7;'>{row['Timestamp']}</small></div></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='text-align: {align};'><div style='display: inline-block; background: {bg}; color: white; padding: 10px; border-radius: 10px; margin-bottom: 5px;'>{row['Message']}</div></div>", unsafe_allow_html=True)
 
-                msg = st.text_input("Type message...", key=f"in_{target_email}")
-                if st.button("Send 🚀", key=f"btn_{target_email}"):
-                    if msg.strip():
-                        send_message(my_mail, target_email, msg)
-                        st.rerun()
-
-            with t2:
-                perm = check_permission(st.session_state.user_email, target_email)
-                if perm == "Accepted":
-                    f_df = pd.read_csv(EXPENSE_DB)
-                    friend_data = f_df[f_df['Email'].astype(str).str.lower().str.strip() == target_email]
-                    if not friend_data.empty:
-                        st.dataframe(friend_data[["Date", "Category", "Amount"]], use_container_width=True)
-                    else:
-                        st.info("No records found.")
-                else:
-                    st.error("🔒 Private Access")
-                    if st.button("Request 🔑"):
-                        pd.DataFrame([[st.session_state.user_email, target_email, "Pending"]], columns=["Requester", "Receiver", "Status"]).to_csv(PERMISSION_DB, mode='a', header=False, index=False)
-                        st.rerun()
+                msg = st
