@@ -5,7 +5,7 @@ import time
 import smtplib
 import random
 from email.message import EmailMessage
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Expense Tracker Pro", page_icon="💰", layout="wide")
@@ -16,7 +16,7 @@ EXPENSE_DB = "expenses.csv"
 CHAT_DB = "messages.csv"
 PERMISSION_DB = "permissions.csv"
 
-# প্রয়োজনীয় ফাইলগুলো তৈরি করা
+# প্রয়োজনীয় ফাইলগুলো তৈরি করা
 for db, cols in [(USER_DB, ["Name", "Email", "Password"]),
                  (EXPENSE_DB, ["Email", "Amount", "Category", "Date"]),
                  (CHAT_DB, ["Sender", "Receiver", "Message", "Timestamp"]),
@@ -72,16 +72,9 @@ def sign_in(email, password):
     return res.iloc[0]['Name'] if not res.empty else None
 
 def send_message(sender, receiver, message):
-    # বাংলাদেশের টাইমজোন সেট করা (UTC + 6 hours)
-    from datetime import timedelta, timezone
-    
-    # বর্তমান UTC টাইম নিয়ে তার সাথে ৬ ঘণ্টা যোগ করা
+    # বাংলাদেশের টাইমজোন (UTC + 6 hours)
     tz_bd = timezone(timedelta(hours=6))
-    now_bd = datetime.now(tz_bd)
-    
-    # সময় ফরম্যাট করা
-    ts = now_bd.strftime("%I:%M %p | %d %b")
-    
+    ts = datetime.now(tz_bd).strftime("%I:%M %p | %d %b")
     pd.DataFrame([[sender, receiver, message, ts]], 
                  columns=["Sender", "Receiver", "Message", "Timestamp"]).to_csv(CHAT_DB, mode='a', header=False, index=False)
 
@@ -95,13 +88,11 @@ def check_permission(requester, receiver):
 # --- UI LOGIC ---
 
 if not st.session_state.logged_in:
-    # --- LOGIN & SIGNUP UI ---
     st.markdown("<h1 style='text-align: center; color: #4A90E2;'>💰 Expense Tracker Pro</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
         tab1, tab2 = st.tabs(["🔑 Sign In", "📝 Create Account"])
-        
         with tab1:
             le = st.text_input("Email", key="log_e")
             lp = st.text_input("Password", type="password", key="log_p")
@@ -119,7 +110,6 @@ if not st.session_state.logged_in:
             n = st.text_input("Full Name", key="reg_name")
             e = st.text_input("Email", key="reg_e")
             p = st.text_input("Password", type="password", key="reg_p")
-            
             if st.button("Get OTP", use_container_width=True):
                 if e:
                     otp = send_otp(e)
@@ -142,9 +132,6 @@ if not st.session_state.logged_in:
                         st.error("Wrong OTP code.")
 
 else:
-    # --- LOGGED IN UI ---
-    
-    # Sidebar
     with st.sidebar:
         st.markdown(f"### 👤 Welcome, {st.session_state.user_name}!")
         st.write(st.session_state.user_email)
@@ -153,13 +140,10 @@ else:
             st.session_state.logged_in = False
             st.rerun()
 
-    # Main Grid
     m_col1, m_col2 = st.columns([1.2, 1])
 
     with m_col1:
         st.title("💸 My Expenses")
-        
-        # Add Expense Form
         with st.container(border=True):
             c1, c2 = st.columns(2)
             with c1:
@@ -170,72 +154,80 @@ else:
             if st.button("➕ Add Record", use_container_width=True, type="primary"):
                 if amt > 0:
                     dt = datetime.now().strftime("%Y-%m-%d")
-                    pd.DataFrame([[st.session_state.user_email, amt, cat, dt]], 
+                    # সঠিক ইমেইল ফরম্যাটে সেভ করা হচ্ছে
+                    pd.DataFrame([[st.session_state.user_email.lower().strip(), amt, cat, dt]], 
                                  columns=["Email", "Amount", "Category", "Date"]).to_csv(EXPENSE_DB, mode='a', header=False, index=False)
                     st.toast("Expense added successfully!", icon="✅")
                     time.sleep(0.5)
                     st.rerun()
 
-        # Data Display
-        df = pd.read_csv(EXPENSE_DB)
-        my_df = df[df['Email'] == st.session_state.user_email]
-        
-        if not my_df.empty:
-            st.subheader("📊 Spending Summary")
-            st.metric("Total Spent", f"{my_df['Amount'].sum()} TK")
-            st.bar_chart(my_df.groupby("Category")["Amount"].sum())
-            with st.expander("📄 View History"):
-                st.dataframe(my_df[["Date", "Category", "Amount"]], use_container_width=True)
-        else:
-            st.info("No records found. Add your first expense above!")
+        # --- এই অংশটি ফিক্স করা হয়েছে যাতে ডাটা দেখা যায় ---
+        if os.path.exists(EXPENSE_DB):
+            df = pd.read_csv(EXPENSE_DB)
+            # ফিল্টারিং আরও শক্তিশালী করা হয়েছে
+            my_df = df[df['Email'].astype(str).str.lower().str.strip() == st.session_state.user_email.lower().strip()]
+            
+            if not my_df.empty:
+                st.subheader("📊 Spending Summary")
+                st.metric("Total Spent", f"{my_df['Amount'].sum()} TK")
+                st.bar_chart(my_df.groupby("Category")["Amount"].sum())
+                with st.expander("📄 View History"):
+                    st.dataframe(my_df[["Date", "Category", "Amount"]], use_container_width=True)
+            else:
+                st.info("No records found. Add your first expense above!")
 
     with m_col2:
         st.title("🌐 Connect")
-        
-        # User selection
         df_users = pd.read_csv(USER_DB)
-        other_users = df_users[df_users['Email'] != st.session_state.user_email]
+        other_users = df_users[df_users['Email'].str.lower().str.strip() != st.session_state.user_email.lower().strip()]
         user_dict = dict(zip(other_users['Name'], other_users['Email']))
         
         target_name = st.selectbox("Find a Friend", ["Select User"] + list(user_dict.keys()))
 
         if target_name != "Select User":
-            target_email = user_dict[target_name]
-            
+            target_email = user_dict[target_name].lower().strip()
             t1, t2 = st.tabs(["💬 Chat", "👁️ View Expenses"])
             
             with t1:
-                # Chat logic - No permission needed
                 st.write(f"Messaging **{target_name}**")
-                
-                # Chat History
                 chat_df = pd.read_csv(CHAT_DB)
-                mask = ((chat_df['Sender'] == st.session_state.user_email) & (chat_df['Receiver'] == target_email)) | \
-                       ((chat_df['Sender'] == target_email) & (chat_df['Receiver'] == st.session_state.user_email))
+                # ইমেইল লোয়ারকেস করে ফিল্টার করা হচ্ছে
+                my_mail = st.session_state.user_email.lower().strip()
+                friend_mail = target_email
+                
+                mask = ((chat_df['Sender'].str.lower().str.strip() == my_mail) & (chat_df['Receiver'].str.lower().str.strip() == friend_mail)) | \
+                       ((chat_df['Sender'].str.lower().str.strip() == friend_mail) & (chat_df['Receiver'].str.lower().str.strip() == my_mail))
                 history = chat_df[mask]
 
                 chat_container = st.container(height=300)
                 for _, row in history.iterrows():
-                    is_me = row['Sender'] == st.session_state.user_email
+                    is_me = row['Sender'].lower().strip() == my_mail
+                    # চ্যাটের কালার এবং টেক্সট ঠিক করা হয়েছে
+                    bg_color = "#800080" if is_me else "#262730"
+                    txt_color = "white"
+                    align = "right" if is_me else "left"
+                    
                     with chat_container:
-                        if is_me:
-                            st.markdown(f"<div style='text-align: right; background:  #800080; padding: 10px; border-radius: 10px; margin-bottom: 5px;'>{row['Message']} <br><small style='font-size: 10px;'>{row['Timestamp']}</small></div>", unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"<div style='text-align: left; background:  ##FFFFFF; padding: 10px; border-radius: 10px; margin-bottom: 5px;'><b>{target_name}:</b> {row['Message']} <br><small style='font-size: 10px;'>{row['Timestamp']}</small></div>", unsafe_allow_html=True)
+                        st.markdown(f"""
+                            <div style='text-align: {align};'>
+                                <div style='display: inline-block; background: {bg_color}; color: {txt_color}; padding: 10px; border-radius: 10px; margin-bottom: 5px; max-width: 80%;'>
+                                    <b>{'You' if is_me else target_name}:</b><br>{row['Message']} <br>
+                                    <small style='font-size: 10px; opacity: 0.7;'>{row['Timestamp']}</small>
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
 
                 msg = st.text_input("Type message...", key=f"in_{target_email}")
                 if st.button("Send 🚀", key=f"btn_{target_email}"):
                     if msg.strip():
-                        send_message(st.session_state.user_email, target_email, msg)
+                        send_message(my_mail, friend_mail, msg)
                         st.rerun()
 
             with t2:
-                # Expense View - Permission Required
                 perm = check_permission(st.session_state.user_email, target_email)
-                
                 if perm == "Accepted":
                     st.success(f"Access granted by {target_name}")
-                    friend_data = df[df['Email'] == target_email]
+                    friend_data = df[df['Email'].str.lower().str.strip() == target_email]
                     if not friend_data.empty:
                         st.dataframe(friend_data[["Date", "Category", "Amount"]], use_container_width=True)
                     else:
@@ -250,7 +242,6 @@ else:
                         st.success("Request sent!")
                         st.rerun()
 
-        # Permission Requests Notifications
         st.divider()
         st.subheader("🔔 Notifications")
         p_df = pd.read_csv(PERMISSION_DB)
