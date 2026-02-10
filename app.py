@@ -5,7 +5,7 @@ import time
 import smtplib
 import random
 from email.message import EmailMessage
-from datetime import datetime
+from datetime import datetime, timezone
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Expense Tracker Pro", page_icon="💰", layout="wide")
@@ -72,7 +72,16 @@ def sign_in(email, password):
     return res.iloc[0]['Name'] if not res.empty else None
 
 def send_message(sender, receiver, message):
-    ts = datetime.now().strftime("%H:%M %p | %d %b")
+    # বাংলাদেশের টাইমজোন সেট করা (UTC + 6 hours)
+    from datetime import timedelta, timezone
+    
+    # বর্তমান UTC টাইম নিয়ে তার সাথে ৬ ঘণ্টা যোগ করা
+    tz_bd = timezone(timedelta(hours=6))
+    now_bd = datetime.now(tz_bd)
+    
+    # সময় ফরম্যাট করা
+    ts = now_bd.strftime("%I:%M %p | %d %b")
+    
     pd.DataFrame([[sender, receiver, message, ts]], 
                  columns=["Sender", "Receiver", "Message", "Timestamp"]).to_csv(CHAT_DB, mode='a', header=False, index=False)
 
