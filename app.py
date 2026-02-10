@@ -33,8 +33,11 @@ init_db()
 # --- CORE FUNCTIONS ---
 def sign_in(email, password):
     df = pd.read_csv(USER_DB)
+    # ইমেইল টাইপ ঠিক করা
+    df['Email'] = df['Email'].astype(str).str.lower().str.strip()
     email = str(email).lower().strip()
-    mask = (df['Email'].astype(str).str.lower().str.strip() == email) & (df['Password'].astype(str).strip() == str(password).strip())
+    
+    mask = (df['Email'] == email) & (df['Password'].astype(str).strip() == str(password).strip())
     res = df[mask]
     return res.iloc[0]['Name'] if not res.empty else None
 
@@ -49,7 +52,7 @@ if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    # লগইন পেজ (আপনার আগের কোডের মতোই থাকবে)
+    # লগইন পেজ
     st.title("💰 Expense Tracker Login")
     le = st.text_input("Email")
     lp = st.text_input("Password", type="password")
@@ -60,6 +63,8 @@ if not st.session_state.logged_in:
             st.session_state.user_email = le.lower().strip()
             st.session_state.user_name = un
             st.rerun()
+        else:
+            st.error("Invalid email or password.")
 else:
     # --- LOGGED IN UI ---
     with st.sidebar:
@@ -83,7 +88,7 @@ else:
                 dt = datetime.now().strftime("%Y-%m-%d")
                 user_mail = st.session_state.user_email
                 
-                # কলামের নাম উল্লেখ করে ডাটা সেভ (এতে কলাম উলটপালট হবে না)
+                # কলামের নাম উল্লেখ করে ডাটা সেভ
                 new_data = pd.DataFrame({"Email": [user_mail], "Amount": [amt], "Category": [cat], "Date": [dt]})
                 new_data.to_csv(EXPENSE_DB, mode='a', header=False, index=False)
                 
@@ -95,23 +100,29 @@ else:
         st.divider()
         if os.path.exists(EXPENSE_DB):
             df_exp = pd.read_csv(EXPENSE_DB)
-            # ডাটা ক্লিনআপ
-            df_exp['Email'] = df_exp['Email'].astype(str).str.lower().strip()
+            
+            # ডাটা ক্লিনআপ (AttributeError এড়াতে .astype(str) ব্যবহার)
+            df_exp['Email'] = df_exp['Email'].astype(str).str.lower().str.strip()
+            df_exp['Amount'] = pd.to_numeric(df_exp['Amount'], errors='coerce')
+            
             current_user = st.session_state.user_email
             
+            # ফিল্টারিং
             my_df = df_exp[df_exp['Email'] == current_user]
             
             if not my_df.empty:
                 st.metric("Total Spent", f"{my_df['Amount'].sum():,.2f} TK")
+                # গ্রাফিক্যাল ভিউ
                 st.bar_chart(my_df.groupby("Category")["Amount"].sum())
-                with st.expander("📄 History"):
-                    st.dataframe(my_df[["Date", "Category", "Amount"]].sort_values("Date", ascending=False))
+                
+                with st.expander("📄 History Table"):
+                    # টেবিল ভিউ
+                    st.dataframe(my_df[["Date", "Category", "Amount"]].sort_values("Date", ascending=False), use_container_width=True)
             else:
                 st.info("No records found for this email. Add a record to see the dashboard.")
-                
-                # ডাটাবেস রিসেট বাটন (শুধুমাত্র যদি কলাম খুব বেশি এলোমেলো থাকে)
-                if st.button("Clear Incorrect Database"):
-                    pd.DataFrame(columns=["Email", "Amount", "Category", "Date"]).to_csv(EXPENSE_DB, index=False)
-                    st.rerun()
-
-    # মেইন কলাম ২ (Connect/Chat) সেকশন আগের মতোই থাকবে...
+    
+    # --- Connect/Chat Section ---
+    with m_col2:
+        st.title("🌐 Connect")
+        # এই সেকশনটি আপনি চাইলে যোগ করতে পারেন বা পরে যোগ করতে পারেন।
+        st.write("Friend connection features coming soon!")
