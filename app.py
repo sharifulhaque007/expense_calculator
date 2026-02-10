@@ -221,7 +221,7 @@ else:
                         if is_me:
                             st.markdown(f"<div style='text-align: right; background:  #800080; padding: 10px; border-radius: 10px; margin-bottom: 5px;'>{row['Message']} <br><small style='font-size: 10px;'>{row['Timestamp']}</small></div>", unsafe_allow_html=True)
                         else:
-                            st.markdown(f"<div style='text-align: left; background:  #800080; padding: 10px; border-radius: 10px; margin-bottom: 5px;'><b>{target_name}:</b> {row['Message']} <br><small style='font-size: 10px;'>{row['Timestamp']}</small></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='text-align: left; background:  ##FFFFFF; padding: 10px; border-radius: 10px; margin-bottom: 5px;'><b>{target_name}:</b> {row['Message']} <br><small style='font-size: 10px;'>{row['Timestamp']}</small></div>", unsafe_allow_html=True)
 
                 msg = st.text_input("Type message...", key=f"in_{target_email}")
                 if st.button("Send 🚀", key=f"btn_{target_email}"):
