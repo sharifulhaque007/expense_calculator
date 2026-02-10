@@ -2,9 +2,6 @@ import streamlit as st
 import pandas as pd
 import os
 import time
-import random
-import smtplib
-from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
 
 # --- PAGE CONFIG ---
@@ -13,49 +10,60 @@ st.set_page_config(page_title="Expense Tracker Pro", page_icon="💰", layout="w
 # --- DATABASE SETUP ---
 USER_DB = "users.csv"
 EXPENSE_DB = "expenses.csv"
-CHAT_DB = "messages.csv"
-PERMISSION_DB = "permissions.csv"
 
-# প্রয়োজনীয় ফাইলগুলো সঠিক কলামসহ তৈরি করা (যদি না থাকে)
+# ডাটাবেস ফাইলগুলো সঠিক ফরম্যাটে রিসেট করার ফাংশন
 def init_db():
-    db_configs = {
-        USER_DB: ["Name", "Email", "Password"],
-        EXPENSE_DB: ["Email", "Amount", "Category", "Date"],
-        CHAT_DB: ["Sender", "Receiver", "Message", "Timestamp"],
-        PERMISSION_DB: ["Requester", "Receiver", "Status"]
-    }
-    for db, cols in db_configs.items():
-        if not os.path.exists(db):
-            pd.DataFrame(columns=cols).to_csv(db, index=False)
+    # ইউজার ডাটাবেস
+    if not os.path.exists(USER_DB):
+        pd.DataFrame(columns=["Name", "Email", "Password"]).to_csv(USER_DB, index=False)
+    
+    # খরচ ডাটাবেস
+    expected_cols = ["Email", "Amount", "Category", "Date"]
+    if not os.path.exists(EXPENSE_DB):
+        pd.DataFrame(columns=expected_cols).to_csv(EXPENSE_DB, index=False)
+    else:
+        # যদি ফাইল থাকে কিন্তু কলাম ভুল থাকে, তবে কলামগুলো জোর করে ঠিক করা
+        df = pd.read_csv(EXPENSE_DB)
+        if list(df.columns) != expected_cols:
+             pd.DataFrame(columns=expected_cols).to_csv(EXPENSE_DB, index=False)
 
 init_db()
 
-# --- CORE FUNCTIONS ---
+# --- CORE FUNCTIONS (UPDATED) ---
 def sign_in(email, password):
-    df = pd.read_csv(USER_DB)
-    if df.empty: return None
-    # টাইপ চেক
-    df['Email'] = df['Email'].astype(str).str.lower().str.strip()
-    email = str(email).lower().strip()
-    
-    mask = (df['Email'] == email) & (df['Password'].astype(str).strip() == str(password).strip())
-    res = df[mask]
-    return res.iloc[0]['Name'] if not res.empty else None
-
-def send_message(sender, receiver, message):
-    tz_bd = timezone(timedelta(hours=6))
-    ts = datetime.now(tz_bd).strftime("%I:%M %p | %d %b")
-    new_msg = pd.DataFrame({"Sender": [sender], "Receiver": [receiver], "Message": [message], "Timestamp": [ts]})
-    new_msg.to_csv(CHAT_DB, mode='a', header=False, index=False)
+    try:
+        # ফাইলটি চেক করা
+        if not os.path.exists(USER_DB): return None
+        
+        df = pd.read_csv(USER_DB)
+        
+        # ডাটাফ্রেম খালি থাকলে
+        if df.empty: return None
+        
+        # কলামের নাম ঠিক আছে কিনা নিশ্চিত হওয়া এবং টাইপ ঠিক করা
+        if 'Email' not in df.columns or 'Password' not in df.columns: return None
+        
+        email = str(email).lower().strip()
+        
+        # সঠিক টাইপ কাস্টিং
+        df['Email'] = df['Email'].astype(str).str.lower().str.strip()
+        # পাসওয়ার্ড চেক করার আগে এটি নিশ্চিত করা যে এটি একটি সিরিজ
+        df['Password'] = df['Password'].astype(str).str.strip()
+        
+        mask = (df['Email'] == email) & (df['Password'] == str(password).strip())
+        res = df[mask]
+        
+        return res.iloc[0]['Name'] if not res.empty else None
+    except Exception as e:
+        st.error(f"Sign in error: {e}")
+        return None
 
 # --- UI LOGIC ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 
 if not st.session_state.logged_in:
-    # লগইন পেজ
     st.title("💰 Expense Tracker Login")
-    st.markdown("---")
     le = st.text_input("Email")
     lp = st.text_input("Password", type="password")
     if st.button("Login", type="primary", use_container_width=True):
@@ -68,69 +76,55 @@ if not st.session_state.logged_in:
         else:
             st.error("Invalid email or password.")
 else:
-    # --- LOGGED IN UI ---
+    # --- LOGGED IN UI (আগের মতোই থাকবে) ---
     with st.sidebar:
         st.markdown(f"### 👤 Welcome, {st.session_state.user_name}!")
-        st.caption(f"Email: {st.session_state.user_email}")
-        st.markdown("---")
+        st.code(st.session_state.user_email, language="text")
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.logged_in = False
             st.rerun()
 
-    m_col1, m_col2 = st.columns([1.5, 1])
-
-    with m_col1:
-        st.title("💸 My Expenses")
-        
-        with st.container(border=True):
-            c1, c2 = st.columns(2)
-            amt = c1.number_input("Amount (TK)", min_value=1.0, step=10.0, format="%.2f")
-            cat = c2.selectbox("Category", ["🍔 Food", "🚗 Transport", "🔌 Bills", "🏠 Rent", "🎁 Others"])
-            
-            if st.button("➕ Add Record", use_container_width=True, type="primary"):
-                dt = datetime.now().strftime("%Y-%m-%d")
-                user_mail = st.session_state.user_email
-                
-                # কলামের নাম উল্লেখ করে সঠিক ডাটা সেভ
-                new_data = pd.DataFrame({"Email": [user_mail], "Amount": [amt], "Category": [cat], "Date": [dt]})
-                new_data.to_csv(EXPENSE_DB, mode='a', header=False, index=False)
-                
-                st.success(f"Added {amt} TK to {cat}!")
-                time.sleep(1)
-                st.rerun()
-
-        # --- DASHBOARD ---
-        st.divider()
-        if os.path.exists(EXPENSE_DB):
-            df_exp = pd.read_csv(EXPENSE_DB)
-            
-            # ডাটা ক্লিনআপ (AttributeError এড়াতে)
-            if not df_exp.empty:
-                df_exp['Email'] = df_exp['Email'].astype(str).str.lower().str.strip()
-                df_exp['Amount'] = pd.to_numeric(df_exp['Amount'], errors='coerce')
-                
-                current_user = st.session_state.user_email
-                
-                # ফিল্টারিং (শুধুমাত্র লগইন করা ইউজারের ডাটা)
-                my_df = df_exp[df_exp['Email'] == current_user]
-                
-                if not my_df.empty:
-                    st.metric("Total Spent", f"{my_df['Amount'].sum():,.2f} TK")
-                    
-                    # গ্রাফিক্যাল ভিউ
-                    st.subheader("📊 Category Distribution")
-                    chart_data = my_df.groupby("Category")["Amount"].sum()
-                    st.bar_chart(chart_data)
-                    
-                    with st.expander("📄 History Table"):
-                        # টেবিল ভিউ
-                        st.dataframe(my_df[["Date", "Category", "Amount"]].sort_values("Date", ascending=False), use_container_width=True)
-                else:
-                    st.info("No records found for this email. Add a record to see the dashboard.")
-            else:
-                st.info("Database is empty.")
+    st.title("💸 My Expenses")
     
-    # --- Connect/Chat Section ---
-    with m_col2:
-        st.title("🌐 Connect")
-        st.write("Friend connection features coming soon!")
+    with st.container(border=True):
+        c1, c2, c3 = st.columns([2, 2, 1])
+        amt = c1.number_input("Amount (TK)", min_value=1.0, step=10.0)
+        cat = c2.selectbox("Category", ["🍔 Food", "🚗 Transport", "🔌 Bills", "🏠 Rent", "🎁 Others"])
+        
+        if c3.button("➕ Add Record", use_container_width=True, type="primary"):
+            dt = datetime.now().strftime("%Y-%m-%d")
+            user_mail = st.session_state.user_email.lower().strip()
+            
+            new_row = pd.DataFrame([{"Email": user_mail, "Amount": amt, "Category": cat, "Date": dt}])
+            new_row.to_csv(EXPENSE_DB, mode='a', header=False, index=False)
+            
+            st.success("Record Added!")
+            time.sleep(1)
+            st.rerun()
+
+    # --- DASHBOARD ---
+    st.divider()
+    if os.path.exists(EXPENSE_DB):
+        df_exp = pd.read_csv(EXPENSE_DB)
+        
+        if not df_exp.empty:
+            df_exp['Email'] = df_exp['Email'].astype(str).str.lower().str.strip()
+            df_exp['Amount'] = pd.to_numeric(df_exp['Amount'], errors='coerce')
+            
+            current_user = st.session_state.user_email.lower().strip()
+            my_df = df_exp[df_exp['Email'] == current_user].dropna(subset=['Amount'])
+            
+            if not my_df.empty:
+                col_m1, col_m2 = st.columns([1, 2])
+                with col_m1:
+                    st.metric("Total Spent", f"{my_df['Amount'].sum():,.2f} TK")
+                    st.subheader("📊 Category Wise")
+                    st.bar_chart(my_df.groupby("Category")["Amount"].sum())
+                
+                with col_m2:
+                    st.subheader("📄 Recent History")
+                    st.dataframe(my_df[["Date", "Category", "Amount"]].sort_values("Date", ascending=False), use_container_width=True)
+            else:
+                st.info(f"No records found for {current_user}. Please add an expense.")
+        else:
+            st.info("The database is currently empty.")
