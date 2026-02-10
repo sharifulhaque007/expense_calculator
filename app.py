@@ -166,32 +166,35 @@ else:
                     time.sleep(0.5)
                     st.rerun()
 
-        # --- DASHBOARD SECTION ---
+        # --- DASHBOARD SECTION (UPDATED) ---
         st.divider()
         
         if os.path.exists(EXPENSE_DB):
             # ফাইল থেকে ডাটা রিড করা
             df_exp = pd.read_csv(EXPENSE_DB)
             
-            # ডাটা ক্লিন করা (খুবই গুরুত্বপূর্ণ)
-            df_exp['Email'] = df_exp['Email'].astype(str).str.lower().str.strip()
-            my_mail = st.session_state.user_email.lower().strip()
-            
-            # ফিল্টারিং
-            my_df = df_exp[df_exp['Email'] == my_mail]
-            
-            if not my_df.empty:
-                # ড্যাশবোর্ড দেখানো
-                total = my_df['Amount'].sum()
-                st.metric(label="Total Spent", value=f"{total:,.2f} TK")
+            if not df_exp.empty:
+                # ডাটা ক্লিন করা (খুবই গুরুত্বপূর্ণ)
+                df_exp['Email'] = df_exp['Email'].astype(str).str.lower().str.strip()
+                my_mail = st.session_state.user_email.lower().strip()
                 
-                st.subheader("📊 Category-wise Distribution")
-                chart_data = my_df.groupby("Category")["Amount"].sum()
-                st.bar_chart(chart_data)
+                # ফিল্টারিং
+                my_df = df_exp[df_exp['Email'] == my_mail]
                 
-                with st.expander("📄 Detailed History"):
-                    # ডাটা টেবিল দেখানো
-                    st.table(my_df[["Date", "Category", "Amount"]].sort_values(by="Date", ascending=False))
+                if not my_df.empty:
+                    # ড্যাশবোর্ড দেখানো
+                    total = my_df['Amount'].sum()
+                    st.metric(label="Total Spent", value=f"{total:,.2f} TK")
+                    
+                    st.subheader("📊 Category-wise Distribution")
+                    chart_data = my_df.groupby("Category")["Amount"].sum()
+                    st.bar_chart(chart_data)
+                    
+                    with st.expander("📄 Detailed History"):
+                        # ডাটা টেবিল দেখানো
+                        st.table(my_df[["Date", "Category", "Amount"]].sort_values(by="Date", ascending=False))
+                else:
+                    st.info("No expense data found for your account. Add your first expense above!")
             else:
                 st.info("No expense data found. Add your first expense!")
         else:
